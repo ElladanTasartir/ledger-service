@@ -1,2 +1,5 @@
 kafka:
-  url: "localhost:9092"
+  url: "localhost:29092"
+  group_id: "ledger_service_group"
+  consumer_topics:
+    - create_ledger

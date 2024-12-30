@@ -1,23 +1,43 @@
 package main
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/ElladanTasartir/ledger-service/internal/config"
+	"github.com/ElladanTasartir/ledger-service/internal/event/consumer"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
 func main() {
-	logger, err := zap.NewProduction()
-	if err != nil {
-		fmt.Println("Failed to setup logger")
-		panic(1)
-	}
+	fx.New(
+		fx.Provide(zap.NewProduction),
+		config.NewConfigModule("config"),
+		consumer.NewConsumerModule(),
+		fx.Invoke(BootstrapApplication),
+	).Run()
+}
 
-	config, err := config.NewConfig("config")
-	if err != nil {
-		logger.Panic("Failed to setup config", zap.Error(err))
-	}
+func BootstrapApplication(
+	lc fx.Lifecycle,
+	consumer consumer.Consumer,
+	logger *zap.Logger,
+) {
+	logger = logger.With(zap.String("at", "Main"))
 
-	logger.Info("Start", zap.Any("config", config))
+	lc.Append(fx.StartStopHook(
+		func() error {
+			go func() {
+				if err := consumer.StartConsumers(context.Background()); err != nil {
+					logger.Error("failed to start consumers", zap.Error(err))
+				}
+			}()
+
+			return nil
+		},
+		func() error {
+			logger.Info("Shutting down application")
+			return nil
+		},
+	))
 }
