@@ -3,3 +3,4 @@ kafka:
   group_id: "ledger_service_group"
   consumer_topics:
     - create_ledger
+    - new_topic

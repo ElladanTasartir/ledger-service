@@ -2,20 +2,33 @@ package main
 
 import (
 	"context"
+	"log"
 
 	"github.com/ElladanTasartir/ledger-service/internal/config"
 	"github.com/ElladanTasartir/ledger-service/internal/event/consumer"
+	"github.com/ElladanTasartir/ledger-service/internal/event/handler"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
 func main() {
-	fx.New(
+	app := fx.New(
 		fx.Provide(zap.NewProduction),
 		config.NewConfigModule("config"),
+		handler.NewCreateTransactionHandlerModule(),
 		consumer.NewConsumerModule(),
 		fx.Invoke(BootstrapApplication),
-	).Run()
+	)
+
+	if err := app.Start(context.Background()); err != nil {
+		log.Fatalf("failed to start application. err = %v", err)
+	}
+
+	<-app.Done()
+
+	if err := app.Stop(context.Background()); err != nil {
+		log.Fatalf("failed to shutdown gracefully. err = %v", err)
+	}
 }
 
 func BootstrapApplication(

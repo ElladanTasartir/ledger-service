@@ -6,6 +6,7 @@ import (
 
 	"github.com/ElladanTasartir/ledger-service/internal/common"
 	"github.com/ElladanTasartir/ledger-service/internal/config"
+	"github.com/ElladanTasartir/ledger-service/internal/event/handler"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -16,11 +17,12 @@ type Consumer interface {
 }
 
 type consumer struct {
-	logger          *zap.Logger
-	consumerURL     string
-	consumerGroupID string
-	consumerTopics  []string
-	consumer        *kafka.Consumer
+	logger                    *zap.Logger
+	consumerURL               string
+	consumerGroupID           string
+	consumerTopics            []string
+	consumer                  *kafka.Consumer
+	createrTransactionHandler handler.CreateTransactionHandler
 }
 
 func NewConsumerModule() fx.Option {
@@ -29,11 +31,12 @@ func NewConsumerModule() fx.Option {
 	)
 }
 
-func NewConsumer(config *config.Config, logger *zap.Logger) (Consumer, error) {
+func NewConsumer(config *config.Config, createTransactionHandler handler.CreateTransactionHandler, logger *zap.Logger) (Consumer, error) {
 	consumer := &consumer{
-		consumerURL:     config.Kafka.URL,
-		consumerGroupID: config.Kafka.GroupID,
-		consumerTopics:  config.Kafka.ConsumerTopics,
+		consumerURL:               config.Kafka.URL,
+		consumerGroupID:           config.Kafka.GroupID,
+		consumerTopics:            config.Kafka.ConsumerTopics,
+		createrTransactionHandler: createTransactionHandler,
 		logger: logger.With(
 			zap.String("at", "Consumer"),
 		),
@@ -55,6 +58,7 @@ func (c *consumer) StartConsumers(ctx context.Context) error {
 	c.consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": c.consumerURL,
 		"group.id":          c.consumerGroupID,
+		"auto.offset.reset": "earliest",
 	})
 	if err != nil {
 		c.logger.Panic("Failed to bootstrap consumer", zap.Error(err))
@@ -72,12 +76,25 @@ func (c *consumer) subscribeToTopics(ctx context.Context) error {
 
 	c.consumer.SubscribeTopics(c.consumerTopics, nil)
 	for {
+		ctx, cancel := context.WithTimeout(ctx, common.ConsumerHandleTimeout)
+		defer cancel()
+
 		msg, err := c.consumer.ReadMessage(common.ConsumerReadTimeout)
 		if err != nil {
 			c.logger.Error("failed to read message", zap.Error(err))
 			return err
 		}
 
-		c.logger.Info("message", zap.Any("msg", msg))
+		switch *msg.TopicPartition.Topic {
+		case common.CreateLedgerTopic:
+			if err := c.createrTransactionHandler.Handle(ctx); err != nil {
+				c.logger.Error("failed to create transaction", zap.Error(err))
+				continue
+			}
+
+			c.logger.Info("consume create transaction event")
+		default:
+			c.logger.Warn("Unsupported handler method")
+		}
 	}
 }
