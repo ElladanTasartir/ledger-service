@@ -23,7 +23,8 @@ func NewCreateLedgerHandlerModule() fx.Option {
 
 func NewCreateLedgerHandler(logger *zap.Logger) CreateLedgerHandler {
 	return &createLedgerHandler{
-		logger: logger,
+		logger: logger.With(
+			zap.String("at", "CreateLedgerHandler")),
 	}
 }
 
