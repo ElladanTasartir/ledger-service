@@ -1,10 +1,11 @@
 services:
   db:
-    image: postgres:latest
+    image: postgres:15
     container_name: db
     environment:
-      POSTGRES_PASSWORD: pgql_ledger
-      POSTGRES_USER: pdgql_ledger
+      POSTGRES_DB: ledger
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: pg_ledger
     ports:
       - 5432:5432
 
@@ -43,7 +44,8 @@ services:
     command: >
       bash -c
       "sleep 5s &&
-      kafka-topics --create --topic=create_ledger --if-not-exists --bootstrap-server=kafka:9092"
+      kafka-topics --create --topic=create_transaction --if-not-exists --bootstrap-server=kafka:9092" &&
+      kafka-topics --create --topic=create_ledger --if-not-exists --bootstrap-server=kafka:9092
 
   control-center:
     image: confluentinc/cp-enterprise-control-center:latest

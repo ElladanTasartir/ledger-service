@@ -15,6 +15,7 @@ func main() {
 	app := fx.New(
 		fx.Provide(zap.NewProduction),
 		config.NewConfigModule("config"),
+		handler.NewCreateLedgerHandlerModule(),
 		handler.NewCreateTransactionHandlerModule(),
 		consumer.NewConsumerModule(),
 		fx.Invoke(BootstrapApplication),

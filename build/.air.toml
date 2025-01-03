@@ -1,8 +1,8 @@
 root = "./"
 
 [build]
-  bin = "./ledger"
-  cmd = "go build -o ./ledger ./cmd/ledger/main.go"
+  bin = "./bin/ledger"
+  cmd = "go build -o ./bin/ledger ./cmd/ledger/main.go"
   delay = 1000
   exclude_dir = ["assets", "tmp"]
   exclude_regex = ["_test.go"]

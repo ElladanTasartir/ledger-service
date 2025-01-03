@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
+type HandleMessage = func(ctx context.Context, message []byte) error
+
 type Consumer interface {
 	StartConsumers(ctx context.Context) error
 }
@@ -23,6 +25,8 @@ type consumer struct {
 	consumerTopics            []string
 	consumer                  *kafka.Consumer
 	createrTransactionHandler handler.CreateTransactionHandler
+	createLedgerHandler       handler.CreateLedgerHandler
+	supportedHandlers         map[string]HandleMessage
 }
 
 func NewConsumerModule() fx.Option {
@@ -31,15 +35,26 @@ func NewConsumerModule() fx.Option {
 	)
 }
 
-func NewConsumer(config *config.Config, createTransactionHandler handler.CreateTransactionHandler, logger *zap.Logger) (Consumer, error) {
+func NewConsumer(
+	config *config.Config,
+	createLedgerHandler handler.CreateLedgerHandler,
+	createTransactionHandler handler.CreateTransactionHandler,
+	logger *zap.Logger,
+) (Consumer, error) {
 	consumer := &consumer{
 		consumerURL:               config.Kafka.URL,
 		consumerGroupID:           config.Kafka.GroupID,
 		consumerTopics:            config.Kafka.ConsumerTopics,
 		createrTransactionHandler: createTransactionHandler,
+		createLedgerHandler:       createLedgerHandler,
 		logger: logger.With(
 			zap.String("at", "Consumer"),
 		),
+	}
+
+	consumer.supportedHandlers = map[string]HandleMessage{
+		common.CreateLedgerTopic:      consumer.handleCreateLedgerMessage,
+		common.CreateTransactionTopic: consumer.handleCreateTransactionMessage,
 	}
 
 	if len(consumer.consumerURL) == 0 {
@@ -56,9 +71,10 @@ func NewConsumer(config *config.Config, createTransactionHandler handler.CreateT
 func (c *consumer) StartConsumers(ctx context.Context) error {
 	var err error
 	c.consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": c.consumerURL,
-		"group.id":          c.consumerGroupID,
-		"auto.offset.reset": "earliest",
+		"bootstrap.servers":  c.consumerURL,
+		"group.id":           c.consumerGroupID,
+		"auto.offset.reset":  "earliest",
+		"enable.auto.commit": false,
 	})
 	if err != nil {
 		c.logger.Panic("Failed to bootstrap consumer", zap.Error(err))
@@ -85,16 +101,41 @@ func (c *consumer) subscribeToTopics(ctx context.Context) error {
 			return err
 		}
 
-		switch *msg.TopicPartition.Topic {
-		case common.CreateLedgerTopic:
-			if err := c.createrTransactionHandler.Handle(ctx); err != nil {
-				c.logger.Error("failed to create transaction", zap.Error(err))
-				continue
-			}
-
-			c.logger.Info("consume create transaction event")
-		default:
-			c.logger.Warn("Unsupported handler method")
+		if err := c.handleMessage(ctx, msg); err != nil {
+			c.logger.Error("failed to handle message", zap.Error(err))
+		} else {
+			c.logger.Info("message consumed successfully")
 		}
 	}
+}
+
+func (c *consumer) handleMessage(ctx context.Context, message *kafka.Message) error {
+	topic := *message.TopicPartition.Topic
+	logger := c.logger.With(zap.String("topic", topic))
+
+	if messageHandler, ok := c.supportedHandlers[topic]; ok {
+		if err := messageHandler(ctx, message.Value); err != nil {
+			logger.Error("failed to handle message", zap.Error(err))
+			return err
+		}
+
+		if _, err := c.consumer.CommitMessage(message); err != nil {
+			logger.Error("failed to commit message")
+			return err
+		}
+
+		logger.Info("consume event")
+		return nil
+	}
+
+	logger.Warn("unsupported handler method")
+	return nil
+}
+
+func (c *consumer) handleCreateLedgerMessage(ctx context.Context, message []byte) error {
+	return nil
+}
+
+func (c *consumer) handleCreateTransactionMessage(ctx context.Context, message []byte) error {
+	return nil
 }
