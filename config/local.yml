@@ -4,3 +4,10 @@ kafka:
   consumer_topics:
     - create_ledger
     - create_transaction
+
+db:
+  host: localhost
+  port: 5432
+  user: ledger
+  password: pg_ledger
+  database: ledger

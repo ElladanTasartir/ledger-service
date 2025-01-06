@@ -92,9 +92,6 @@ func (c *consumer) subscribeToTopics(ctx context.Context) error {
 
 	c.consumer.SubscribeTopics(c.consumerTopics, nil)
 	for {
-		ctx, cancel := context.WithTimeout(ctx, common.ConsumerHandleTimeout)
-		defer cancel()
-
 		msg, err := c.consumer.ReadMessage(common.ConsumerReadTimeout)
 		if err != nil {
 			c.logger.Error("failed to read message", zap.Error(err))

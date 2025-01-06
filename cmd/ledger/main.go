@@ -7,6 +7,7 @@ import (
 	"github.com/ElladanTasartir/ledger-service/internal/config"
 	"github.com/ElladanTasartir/ledger-service/internal/event/consumer"
 	"github.com/ElladanTasartir/ledger-service/internal/event/handler"
+	"github.com/ElladanTasartir/ledger-service/internal/storage"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -15,6 +16,7 @@ func main() {
 	app := fx.New(
 		fx.Provide(zap.NewProduction),
 		config.NewConfigModule("config"),
+		storage.NewStorageModule(),
 		handler.NewCreateLedgerHandlerModule(),
 		handler.NewCreateTransactionHandlerModule(),
 		consumer.NewConsumerModule(),
